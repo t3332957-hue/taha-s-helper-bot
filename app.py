@@ -842,7 +842,7 @@ textarea{flex:1;resize:none;border:0;outline:0;background:transparent;color:whit
 <div class="overlay" id="overlay" onclick="toggleSide()"></div>
 <main class="main">
 <header class="topbar">
- <div class="top-right"><button class="iconbtn" onclick="toggleSide()">☰</button><div><div class="brand">Taha's Helper Bot</div><div class="model" id="modelLabel">در حال اتصال...</div></div></div>
+ <div class="top-right"><button class="iconbtn" onclick="toggleSide()">☰</button><div><div class="brand">Taha's Helper Bot</div><div class="model" id="modelLabel">● آنلاین</div></div></div>
  <div class="top-left"><button class="iconbtn" onclick="newChat()">✎</button><button class="iconbtn" onclick="toggleMenu()">⋮</button></div>
  <div class="menu" id="menu"><form method="post" action="/logout"><button type="submit">🚪 خروج از حساب</button></form><button onclick="newChat();toggleMenu()">چت جدید</button><button onclick="clearChat();toggleMenu()">پاک کردن این چت</button><button onclick="showAbout();toggleMenu()">درباره</button><button onclick="alert('جستجوی وب برای پرسش‌های خبری و به‌روز به‌صورت خودکار فعال است.')">🌐 جستجوی وب</button></div>
 </header>
@@ -1087,7 +1087,7 @@ async function loadInfo(){
   document.getElementById('modelLabel').textContent=d.model||'مدل آماده';
  }catch(e){
   // /health is public, so a session/auth problem cannot leave the UI
-  // permanently stuck on "در حال اتصال...".
+  // permanently stuck on "● آنلاین".
   const el=document.getElementById('modelLabel');
   if(el) el.textContent='مدل آماده';
  }
