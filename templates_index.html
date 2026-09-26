@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Taha's Helper Bot</title>
+<style>
+*{box-sizing:border-box}
+:root{--bg:#0b0b0f;--line:#2a2a33;--text:#f4f4f5;--muted:#a1a1aa;--bubble:#202024}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif}
+body{overflow:hidden}button{font:inherit;color:inherit}
+.app{height:100dvh;display:flex;background:var(--bg)}
+.sidebar{width:290px;background:#101014;border-left:1px solid var(--line);display:flex;flex-direction:column;padding:12px;gap:10px;position:fixed;right:0;top:0;bottom:0;z-index:20;transform:translateX(100%);transition:.22s ease}
+.sidebar.open{transform:translateX(0)}
+.side-top{display:flex;align-items:center;gap:8px}
+.newchat{flex:1;border:1px solid #303039;background:#1b1b21;border-radius:12px;padding:12px;cursor:pointer;text-align:right}
+.close-side,.iconbtn{width:44px;height:44px;border:0;border-radius:12px;background:transparent;cursor:pointer;font-size:23px;display:grid;place-items:center}
+.close-side:hover,.iconbtn:hover,.newchat:hover{background:#23232a}
+.history{overflow:auto;flex:1;padding-top:6px}.history-title{font-size:12px;color:var(--muted);padding:10px 8px}
+.main{height:100%;width:100%;display:flex;flex-direction:column}
+.topbar{height:64px;display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #202027;background:rgba(11,11,15,.94);backdrop-filter:blur(14px);position:relative;z-index:5}
+.top-right,.top-left{display:flex;align-items:center;gap:6px}.brand{font-weight:700;font-size:17px}.model{font-size:11px;color:var(--muted);margin-right:6px}
+.menu{position:absolute;left:12px;top:54px;width:210px;background:#1a1a20;border:1px solid #30303a;border-radius:14px;padding:6px;display:none;box-shadow:0 18px 45px #0008;z-index:30}
+.menu.open{display:block}.menu button{width:100%;border:0;background:transparent;padding:12px;text-align:right;border-radius:9px;cursor:pointer}.menu button:hover{background:#292930}
+.messages{flex:1;overflow:auto;padding:22px 14px 150px}.empty{height:100%;display:grid;place-items:center;text-align:center;color:#eee}.empty h1{font-size:30px;margin:0 0 10px}.empty p{color:var(--muted);margin:0}
+.msg{max-width:820px;margin:0 auto 18px;display:flex;gap:12px;align-items:flex-start}.avatar{width:32px;height:32px;border-radius:9px;background:#23232a;display:grid;place-items:center;flex:none}.msg.user .avatar{background:#2d2d35}
+.bubble{white-space:pre-wrap;line-height:1.8;font-size:15px;flex:1;padding-top:3px}.msg.assistant .bubble{background:var(--bubble);padding:12px 14px;border-radius:15px}
+.composer-wrap{position:fixed;left:0;right:0;bottom:0;padding:12px 14px 16px;background:linear-gradient(transparent,var(--bg) 22%);z-index:10}
+.composer{max-width:820px;margin:auto;background:#1d1d22;border:1px solid #35353e;border-radius:18px;display:flex;align-items:flex-end;gap:8px;padding:8px}
+textarea{flex:1;resize:none;border:0;outline:0;background:transparent;color:white;min-height:44px;max-height:160px;padding:11px;font-size:16px;line-height:1.5}
+.send,.attach{width:44px;height:44px;border:0;border-radius:13px;cursor:pointer;display:grid;place-items:center}.send{background:#fff;color:#111;font-size:20px}.attach{background:#292930}.send:disabled{opacity:.35}.file-input{display:none}
+.overlay{display:none;position:fixed;inset:0;background:#0007;z-index:15}.overlay.open{display:block}
+@media(min-width:900px){.sidebar{position:relative;transform:none;order:2;border-left:1px solid var(--line)}.close-side{display:none}.overlay{display:none!important}.main{width:calc(100% - 290px)}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="sidebar" id="sidebar">
+ <div class="side-top"><button class="newchat" onclick="newChat()">＋ چت جدید</button><button class="close-side" onclick="toggleSide()">×</button></div>
+ <div class="history"><div class="history-title">تاریخچه</div><div id="history"></div></div>
+</aside>
+<div class="overlay" id="overlay" onclick="toggleSide()"></div>
+<main class="main">
+<header class="topbar">
+ <div class="top-right"><button class="iconbtn" onclick="toggleSide()">☰</button><div><div class="brand">Taha's Helper Bot</div><div class="model" id="modelLabel">در حال اتصال...</div></div></div>
+ <div class="top-left"><button class="iconbtn" onclick="newChat()">✎</button><button class="iconbtn" onclick="toggleMenu()">⋮</button></div>
+ <div class="menu" id="menu"><button onclick="newChat();toggleMenu()">چت جدید</button><button onclick="clearChat();toggleMenu()">پاک کردن این چت</button><button onclick="showAbout();toggleMenu()">درباره</button></div>
+</header>
+<section class="messages" id="messages"><div class="empty"><div><h1>Taha's Helper Bot</h1><p>هر چیزی می‌خواهی بنویس…</p></div></div></section>
+<div class="composer-wrap">
+ <div class="composer"><input id="file" class="file-input" type="file" onchange="filePicked(this)"><button class="attach" onclick="document.getElementById('file').click()">📎</button><textarea id="input" placeholder="پیامت را بنویس..." rows="1"></textarea><button class="send" id="send" onclick="sendMessage()">↑</button></div>
+ <div class="status" id="status">آماده</div>
+</div>
+</main>
+</div>
+<script>
+let messages=[],busy=false;const input=document.getElementById('input');
+input.addEventListener('input',()=>{input.style.height='auto';input.style.height=Math.min(input.scrollHeight,160)+'px'});
+input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}});
+function toggleSide(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('overlay').classList.toggle('open')}
+function toggleMenu(){document.getElementById('menu').classList.toggle('open')}
+function newChat(){messages=[];render();input.value='';input.focus();document.getElementById('status').textContent='چت جدید'}
+function clearChat(){newChat()} function showAbout(){alert('Taha's Helper Bot\\nرابط مستقل Flask برای Pydroid 3')}
+function filePicked(el){if(el.files.length)document.getElementById('status').textContent='فایل انتخاب شد: '+el.files[0].name}
+function addMessage(role,text){messages.push({role,content:text});render()}
+function render(){const box=document.getElementById('messages');if(!messages.length){box.innerHTML='<div class="empty"><div><h1>Taha's Helper Bot</h1><p>هر چیزی می‌خواهی بنویس…</p></div></div>';return}box.innerHTML='';messages.forEach(m=>{const row=document.createElement('div');row.className='msg '+m.role;row.innerHTML='<div class="avatar">'+(m.role==='user'?'شما':'م')+'</div><div class="bubble"></div>';row.querySelector('.bubble').textContent=m.content;box.appendChild(row)});box.scrollTop=box.scrollHeight}
+function setBusy(v){busy=v;document.getElementById('send').disabled=v;document.getElementById('status').textContent=v?'در حال پاسخ…':'آماده'}
+async function sendMessage(){if(busy)return;const text=input.value.trim();if(!text)return;addMessage('user',text);input.value='';input.style.height='auto';setBusy(true);try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages})});const data=await r.json();if(!r.ok)throw new Error(data.error||'خطای سرور');addMessage('assistant',data.reply||'پاسخی دریافت نشد.');document.getElementById('modelLabel').textContent=data.model||''}catch(e){addMessage('assistant','❌ '+e.message)}finally{setBusy(false);input.focus()}}
+async function loadInfo(){try{const r=await fetch('/api/info');const d=await r.json();document.getElementById('modelLabel').textContent=d.model||'مدل نامشخص'}catch(e){}}
+loadInfo();
+</script>
+</body>
+</html>
