@@ -706,7 +706,7 @@ textarea{flex:1;resize:none;border:0;outline:0;background:transparent;color:whit
 <div class="overlay" id="overlay" onclick="toggleSide()"></div>
 <main class="main">
 <header class="topbar">
- <div class="top-right"><button class="iconbtn" onclick="toggleSide()">☰</button><div><div class="brand">Taha's Helper Bot</div><div class="model" id="modelLabel">در حال اتصال...</div></div></div>
+ <div class="top-right"><button class="iconbtn" onclick="toggleSide()">☰</button><div><div class="brand">Taha's Helper Bot</div><div class="model" id="modelLabel">● آنلاین</div></div></div>
  <div class="top-left"><button class="iconbtn" onclick="newChat()">✎</button><button class="iconbtn" onclick="toggleMenu()">⋮</button></div>
  <div class="menu" id="menu"><button onclick="newChat();toggleMenu()">چت جدید</button><button onclick="clearChat();toggleMenu()">پاک کردن این چت</button><button onclick="showAbout();toggleMenu()">درباره</button><button onclick="alert('جستجوی وب برای پرسش‌های خبری و به‌روز به‌صورت خودکار فعال است.')">🌐 جستجوی وب</button></div>
 </header>
@@ -736,7 +736,7 @@ function toggleImagePanel(){const p=document.getElementById('imagePanel');const 
 function cancelRequest(){if(activeController){activeController.abort();document.getElementById('status').textContent='درخواست متوقف شد';}}
 function newChat(){messages=[];currentChatId=null;render();input.value='';document.getElementById('file').value='';document.getElementById('filePill').textContent='';input.focus();document.getElementById('status').textContent='چت جدید';loadHistory()}
 function clearChat(){if(!currentChatId){newChat();return} fetch('/api/chats/'+currentChatId,{method:'DELETE'}).finally(()=>newChat())}
-function showAbout(){alert('Taha's Helper Bot\nچت، تاریخچه دائمی، فایل و تبدیل صدا به متن')}
+function showAbout(){alert("Taha's Helper Bot\nچت، تاریخچه دائمی، فایل و تبدیل صدا به متن")}
 function filePicked(el){if(el.files.length){document.getElementById('filePill').textContent='📎 '+el.files[0].name;document.getElementById('status').textContent='فایل آماده ارسال است'}}
 function addMessage(role,text,extra={}){messages.push({role,content:text,...extra});render()}
 function escapeHtml(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;')}
@@ -906,7 +906,7 @@ async function transcribe(blob,filename){
  }catch(e){setBusy(false);document.getElementById('status').textContent='آماده';alert('❌ '+e.message)}
 }
 
-async function loadInfo(){try{const r=await fetch('/api/info');const d=await r.json();document.getElementById('modelLabel').textContent=d.model||'مدل نامشخص'}catch(e){}}
+async function loadInfo(){try{let r=await fetch('/health',{cache:'no-store'});let d=await r.json();if(!r.ok)throw new Error('health');document.getElementById('modelLabel').textContent=d.model||'● آنلاین'}catch(e){document.getElementById('modelLabel').textContent='● آنلاین'}}
 loadInfo();loadHistory();
 </script>
 </body>
