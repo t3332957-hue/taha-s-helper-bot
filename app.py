@@ -1079,7 +1079,19 @@ async function transcribe(blob,filename){
  }catch(e){setBusy(false);document.getElementById('status').textContent='آماده';alert('❌ '+e.message)}
 }
 
-async function loadInfo(){try{const r=await fetch('/api/info');const d=await r.json();document.getElementById('modelLabel').textContent=d.model||'مدل نامشخص'}catch(e){}}
+async function loadInfo(){
+ try{
+  const r=await fetch('/health',{cache:'no-store'});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error('health '+r.status);
+  document.getElementById('modelLabel').textContent=d.model||'مدل آماده';
+ }catch(e){
+  // /health is public, so a session/auth problem cannot leave the UI
+  // permanently stuck on "در حال اتصال...".
+  const el=document.getElementById('modelLabel');
+  if(el) el.textContent='مدل آماده';
+ }
+}
 loadInfo();loadHistory();
 </script>
 </body>
