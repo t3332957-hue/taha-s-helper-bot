@@ -12,15 +12,12 @@ import sys
 from urllib.parse import quote, quote_plus, urlparse, parse_qs, unquote
 
 import requests
-from flask import Flask, request, jsonify, send_from_directory, send_file, session, redirect, url_for
-from functools import wraps
-from werkzeug.security import generate_password_hash, check_password_hash
+from flask import Flask, request, jsonify, send_from_directory, send_file
 
 BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 DATA_DIR = BASE_DIR / "data"
 HISTORY_FILE = DATA_DIR / "chats.json"
-ACCOUNT_FILE = DATA_DIR / "accounts.json"
 UPLOAD_DIR.mkdir(exist_ok=True)
 DATA_DIR.mkdir(exist_ok=True)
 
@@ -39,87 +36,7 @@ FILES_DIR.mkdir(exist_ok=True)
 app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 app.config["JSON_AS_ASCII"] = False
-app.config["SECRET_KEY"] = os.environ.get("MERAJ_SECRET_KEY", "") or uuid.uuid4().hex + uuid.uuid4().hex
-app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
-
-
-def read_account():
-    if not ACCOUNT_FILE.exists():
-        return None
-    try:
-        data = json.loads(ACCOUNT_FILE.read_text(encoding="utf-8"))
-        # accounts.json stores the account(s). Keep backward compatibility with
-        # both a single account object and an {"accounts": [...]} structure.
-        if isinstance(data, dict) and data.get("username") and data.get("password_hash"):
-            return data
-        if isinstance(data, dict) and isinstance(data.get("accounts"), list):
-            for account in data["accounts"]:
-                if isinstance(account, dict) and account.get("username") and account.get("password_hash"):
-                    return account
-    except Exception as e:
-        print("[ACCOUNT READ ERROR]", repr(e))
-    return None
-
-
-def write_account(username, password):
-    ACCOUNT_FILE.write_text(
-        json.dumps({
-            "username": username,
-            "password_hash": generate_password_hash(password),
-            "created_at": datetime.now().isoformat(timespec="seconds"),
-        }, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-
-
-def login_required(view):
-    @wraps(view)
-    def wrapped(*args, **kwargs):
-        if not session.get("authenticated"):
-            if request.path.startswith("/api/") or request.path.startswith("/generated"):
-                return jsonify(error="نیاز به ورود دارید.", login_required=True), 401
-            return redirect(url_for("login_page"))
-        return view(*args, **kwargs)
-    return wrapped
-
-
-def auth_page(mode="login", error=""):
-    account_exists = read_account() is not None
-    if mode == "register" and account_exists:
-        mode = "login"
-    title = "ثبت‌نام | Taha's Helper Bot" if mode == "register" else "ورود | Taha's Helper Bot"
-    heading = "ساخت حساب" if mode == "register" else "ورود به Taha's Helper Bot"
-    error_html = f'<div class="err">{error}</div>' if error else ""
-    if mode == "register":
-        body = """
-        <form method="post" action="/register" class="auth-form">
-          <label>نام کاربری</label>
-          <input name="username" autocomplete="username" maxlength="40" required placeholder="نام کاربری">
-          <label>رمز عبور</label>
-          <input name="password" type="password" autocomplete="new-password" minlength="6" required placeholder="رمز عبور">
-          <label>تکرار رمز عبور</label>
-          <input name="password2" type="password" autocomplete="new-password" minlength="6" required placeholder="تکرار رمز عبور">
-          <button type="submit">ثبت‌نام</button>
-        </form>
-        <p class="switch">حساب داری؟ <a href="/login">ورود</a></p>
-        """
-    else:
-        body = """
-        <form method="post" action="/login" class="auth-form">
-          <label>رمز عبور</label>
-          <input name="password" type="password" autocomplete="current-password" required placeholder="رمز عبور">
-          <button type="submit">ورود</button>
-        </form>
-        """
-        if not account_exists:
-            body += '<p class="switch">هنوز حسابی ساخته نشده؟ <a href="/register">ثبت‌نام</a></p>'
-    return f"""<!doctype html>
-<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>{title}</title>
-<style>
-*{{box-sizing:border-box}}html,body{{margin:0;min-height:100%;background:#0b0b0f;color:#f4f4f5;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif}}body{{display:grid;place-items:center;padding:20px}}.card{{width:min(430px,100%);background:#17171c;border:1px solid #30303a;border-radius:22px;padding:28px;box-shadow:0 20px 60px #0008}}h1{{margin:0 0 8px;font-size:27px}}.sub{{color:#a1a1aa;margin:0 0 24px}}.auth-form{{display:grid;gap:10px}}label{{font-size:14px;color:#d4d4d8;margin-top:4px}}input{{width:100%;border:1px solid #383842;background:#0f0f13;color:#fff;border-radius:12px;padding:14px;font:inherit;outline:none}}input:focus{{border-color:#777}}button{{border:0;border-radius:12px;background:#f4f4f5;color:#111;padding:14px;font:inherit;font-weight:700;cursor:pointer;margin-top:8px}}.switch{{text-align:center;color:#a1a1aa;margin:18px 0 0}}a{{color:#fff}}.err{{background:#3a1d22;border:1px solid #6b2d38;color:#ffb4bd;padding:11px 13px;border-radius:12px;margin-bottom:14px}}
-</style></head><body><main class="card"><h1>Taha's Helper Bot</h1><p class="sub">{heading}</p>{error_html}{body}</main></body></html>"""
 
 def get_models(key):
     r = requests.get(
@@ -651,145 +568,92 @@ def edit_image_file(image_path, prompt):
         raise RuntimeError("پاسخ سرویس ویرایش تصویر قابل خواندن نبود.") from e
 
 
-def upload_reference_to_pollinations(image_path):
-    """Upload a local reference image so Pollinations can use it as image input."""
-    if not image_path or not image_path.exists() or not is_image_file(image_path):
-        raise RuntimeError("تصویر مرجع معتبر نیست.")
-    mime = mimetypes.guess_type(image_path.name)[0] or "image/jpeg"
-    headers = {
-        "Authorization": f"Bearer {POLLINATIONS_API_KEY}",
-        "Cache-Control": "no-cache",
-    }
-    with image_path.open("rb") as fh:
-        r = requests.post(
-            "https://media.pollinations.ai/upload",
-            headers=headers,
-            files={"file": (image_path.name, fh, mime)},
-            timeout=90,
-        )
-    r.raise_for_status()
-    # Pollinations may return a JSON URL or a Link header depending on the deployment.
-    try:
-        data = r.json()
-    except ValueError:
-        data = {}
-    for key in ("url", "media_url", "link"):
-        value = data.get(key) if isinstance(data, dict) else None
-        if isinstance(value, str) and value.startswith(("http://", "https://")):
-            return value
-    link = r.headers.get("Link", "")
-    m = re.search(r"<([^>]+)>;\s*rel=[\"']enclosure[\"']", link)
-    if m:
-        return m.group(1)
-    if r.text.strip().startswith("http"):
-        return r.text.strip().split()[0]
-    raise RuntimeError("نتوانستم آدرس تصویر مرجع را از سرویس تصویر دریافت کنم.")
-
-
-def analyze_generated_image(local_url):
-    """Send the generated image back to Groq Vision for a short verification."""
-    if not VISION_MODEL or not isinstance(local_url, str) or not local_url.startswith("/generated/"):
-        return ""
-    filename = Path(local_url).name
-    path = GENERATED_DIR / filename
-    if not path.exists() or not is_image_file(path):
-        return ""
-    try:
-        messages = [{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "این تصویر تازه ساخته شده است. خیلی کوتاه و دقیق بگو چه چیزهایی در آن دیده می‌شود و آیا با این درخواست هم‌خوانی دارد: " + getattr(analyze_generated_image, "_last_prompt", "")},
-                {"type": "image_url", "image_url": {"url": image_data_url(path)}},
-            ],
-        }]
-        return groq_chat(messages, use_vision=True)
-    except Exception as e:
-        print("[GENERATED IMAGE VISION ERROR]", repr(e))
-        return ""
-
-
-def generate_image_file(prompt, reference_image_path=None):
-    """Generate creatively from the user's topic, optionally using an uploaded reference image."""
+def generate_image_file(prompt):
+    """Generate an image through the current Pollinations API with robust fallbacks."""
     prompt = (prompt or "").strip()
     if not prompt:
         raise RuntimeError("توضیح تصویر خالی است.")
     if not POLLINATIONS_API_KEY:
-        raise RuntimeError("برای ساخت تصویر باید Pollinations API Key را در ترمینال وارد کنی.")
+        raise RuntimeError("برای ساخت تصویر باید POLLINATIONS_API_KEY را در Environment Variables تنظیم کنی.")
 
     original_prompt = prompt
     if len(prompt) > 4000:
         prompt = prompt[:4000]
 
-    # The user supplies the topic; the model is deliberately allowed to be creative
-    # about scene details, composition, lighting, style and supporting details.
-    # Explicit user constraints still have priority.
     creative_prompt = (
         "Create a rich, imaginative, polished image based on the user's requested topic. "
         "Use strong creative judgment for composition, environment, lighting, color, camera angle, "
-        "depth, atmosphere, materials, visual storytelling and tasteful supporting details that naturally "
-        "fit the requested topic. Do not require the user to specify every detail. Expand a short idea into "
-        "a complete, visually compelling scene. However, never contradict an explicit instruction from the user, "
-        "never change requested text, and never replace the main subject or requested identity. "
-        "If a reference image is provided, use it as visual guidance and preserve the important identity, "
-        "shape, subject and distinctive features unless the user explicitly asks to change them. "
-        "Creative freedom means artistic elaboration of the requested idea, not ignoring the user's intent. "
-        "User request: " + prompt
+        "depth, atmosphere, materials, visual storytelling and tasteful supporting details that "
+        "naturally fit the requested topic. Do not require the user to specify every detail. "
+        "Expand a short idea into a complete, visually compelling scene. However, never contradict "
+        "an explicit instruction from the user, never change requested text, and never replace the "
+        "main subject or requested identity. Creative freedom means artistic elaboration of the "
+        "requested idea, not ignoring the user's intent. User request: " + prompt
     )
 
-    # gptimage is preferred for instruction-following and text/layout work.
     image_model = "gptimage"
     headers = {
         "Authorization": f"Bearer {POLLINATIONS_API_KEY}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
+        "Accept": "image/*, application/json",
         "Cache-Control": "no-cache",
         "X-Meraj-Request-ID": uuid.uuid4().hex,
     }
-    payload = {"model": image_model, "prompt": creative_prompt, "response_format": "b64_json", "size": "1024x1024", "quality": "high"}
-    if reference_image_path:
-        payload["image"] = upload_reference_to_pollinations(reference_image_path)
 
     print("\n[IMAGE GEN USER PROMPT]", repr(original_prompt))
-    print("[IMAGE GEN CREATIVE PROMPT]", repr(creative_prompt))
+    print("[IMAGE GEN CONTROLLED PROMPT]", repr(creative_prompt))
+
+    # 1) Use Pollinations' simple native image endpoint first.
+    # Keep a fixed 768x768 output for reliable generation on Render.
+    try:
+        encoded_prompt = quote(creative_prompt, safe="")
+        r = requests.get(
+            "https://gen.pollinations.ai/image/" + encoded_prompt,
+            params={
+                "model": image_model,
+                "width": 768,
+                "height": 768,
+                "nologo": "true",
+                "seed": uuid.uuid4().int % 2147483647,
+            },
+            headers=headers,
+            timeout=180,
+        )
+        if r.ok and r.content:
+            return _save_generated_bytes(r.content, r.headers.get("Content-Type"))
+        print("[IMAGE GEN GET ERROR]", r.status_code, r.text[:1000])
+    except requests.RequestException as e:
+        print("[IMAGE GEN GET CONNECTION ERROR]", repr(e))
+
+    # 2) OpenAI-compatible fallback. This endpoint expects a valid size string.
+    post_headers = dict(headers)
+    post_headers["Content-Type"] = "application/json"
+    post_headers["Accept"] = "application/json"
+    payload = {
+        "model": image_model,
+        "prompt": creative_prompt,
+        "size": "768x768",
+        "n": 1,
+        "response_format": "b64_json",
+    }
     try:
         r = requests.post(
             "https://gen.pollinations.ai/v1/images/generations",
-            headers=headers,
+            headers=post_headers,
             json=payload,
             timeout=180,
         )
         if r.ok:
             return _save_pollinations_json_image(r.json())
-        print("[IMAGE GEN POST ERROR]", r.status_code, r.text[:800])
+        print("[IMAGE GEN POST ERROR]", r.status_code, r.text[:1200])
+        detail = r.text[:500].replace("\\n", " ").strip()
+        raise RuntimeError(f"Pollinations خطا داد ({r.status_code}): {detail}")
+    except requests.HTTPError:
+        raise
     except requests.RequestException as e:
         print("[IMAGE GEN POST CONNECTION ERROR]", repr(e))
+        raise RuntimeError("اتصال به Pollinations برقرار نشد.") from e
     except ValueError as e:
-        print("[IMAGE GEN POST JSON ERROR]", repr(e))
-
-    encoded_prompt = quote(creative_prompt, safe="")
-    fallback_url = "https://gen.pollinations.ai/image/" + encoded_prompt
-    fallback_params = {
-        "model": image_model,
-        "width": 1024,
-        "height": 1024,
-        "nologo": "true",
-        "seed": uuid.uuid4().int % 2147483647,
-    }
-    if reference_image_path:
-        fallback_params["image"] = upload_reference_to_pollinations(reference_image_path)
-    r = requests.get(
-        fallback_url,
-        params=fallback_params,
-        headers={
-            "Authorization": f"Bearer {POLLINATIONS_API_KEY}",
-            "Accept": "image/*",
-            "Cache-Control": "no-cache",
-            "X-Meraj-Request-ID": uuid.uuid4().hex,
-        },
-        timeout=180,
-    )
-    r.raise_for_status()
-    return _save_generated_bytes(r.content, r.headers.get("Content-Type"))
+        raise RuntimeError("پاسخ Pollinations قابل خواندن نبود.") from e
 
 
 HTML_PAGE = r'''<!doctype html>
@@ -842,13 +706,13 @@ textarea{flex:1;resize:none;border:0;outline:0;background:transparent;color:whit
 <div class="overlay" id="overlay" onclick="toggleSide()"></div>
 <main class="main">
 <header class="topbar">
- <div class="top-right"><button class="iconbtn" onclick="toggleSide()">☰</button><div><div class="brand">Taha's Helper Bot</div><div class="model" id="modelLabel">● آنلاین</div></div></div>
+ <div class="top-right"><button class="iconbtn" onclick="toggleSide()">☰</button><div><div class="brand">Taha's Helper Bot</div><div class="model" id="modelLabel">در حال اتصال...</div></div></div>
  <div class="top-left"><button class="iconbtn" onclick="newChat()">✎</button><button class="iconbtn" onclick="toggleMenu()">⋮</button></div>
- <div class="menu" id="menu"><form method="post" action="/logout"><button type="submit">🚪 خروج از حساب</button></form><button onclick="newChat();toggleMenu()">چت جدید</button><button onclick="clearChat();toggleMenu()">پاک کردن این چت</button><button onclick="showAbout();toggleMenu()">درباره</button><button onclick="alert('جستجوی وب برای پرسش‌های خبری و به‌روز به‌صورت خودکار فعال است.')">🌐 جستجوی وب</button></div>
+ <div class="menu" id="menu"><button onclick="newChat();toggleMenu()">چت جدید</button><button onclick="clearChat();toggleMenu()">پاک کردن این چت</button><button onclick="showAbout();toggleMenu()">درباره</button><button onclick="alert('جستجوی وب برای پرسش‌های خبری و به‌روز به‌صورت خودکار فعال است.')">🌐 جستجوی وب</button></div>
 </header>
 <section class="messages" id="messages"><div class="empty"><div><h1>Taha's Helper Bot</h1><p>هر چیزی می‌خواهی بنویس…</p></div></div></section>
 <div class="composer-wrap">
- <div class="image-panel" id="imagePanel"><input id="imagePrompt" placeholder="موضوع تصویر را بنویس؛ اگر عکس آپلود کرده‌ای، همان عکس هم به‌عنوان مرجع استفاده می‌شود"><button onclick="generateImage()">ساخت تصویر</button><button onclick="toggleImagePanel()">×</button></div> <div class="file-pill" id="filePill"></div>
+ <div class="image-panel" id="imagePanel"><input id="imagePrompt" placeholder="مثلاً: یک شهر آینده‌نگر در شب، سبک سینمایی"><button onclick="generateImage()">ساخت تصویر</button><button onclick="toggleImagePanel()">×</button></div> <div class="file-pill" id="filePill"></div>
  <div class="composer">
   <input id="file" class="file-input" type="file" accept="*/*" onchange="filePicked(this)">
   <button class="attach" title="ارسال فایل" onclick="document.getElementById('file').click()">📎</button>
@@ -862,129 +726,92 @@ textarea{flex:1;resize:none;border:0;outline:0;background:transparent;color:whit
 </main>
 </div>
 <script>
-let messages=[],chatBusy=false,imageBusy=false,currentChatId=null,mediaRecorder=null,audioChunks=[],recording=false,chatController=null,lastUploadedImageName="";
+let messages=[],busy=false,currentChatId=null,mediaRecorder=null,audioChunks=[],recording=false,activeController=null;
 const input=document.getElementById('input');
-
-function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function addMessage(role,content,meta={}){
- messages.push({role,content:String(content??''),...(meta||{})});
- render();
-}
-function renderContent(text){
- const frag=document.createDocumentFragment();
- const re=/```([^\\n`]*)\\n([\\s\\S]*?)```/g;
- let last=0,m;
- while((m=re.exec(text))){
-  if(m.index>last) frag.appendChild(document.createTextNode(text.slice(last,m.index)));
-  const block=document.createElement('div');block.className='code-block';
-  const head=document.createElement('div');head.className='code-head';
-  const lang=document.createElement('span');lang.textContent=(m[1]||'code').trim()||'code';
-  const cp=document.createElement('button');cp.className='code-copy';cp.textContent='کپی کد';
-  cp.onclick=async()=>{try{await navigator.clipboard.writeText(m[2]);cp.textContent='کپی شد ✓';setTimeout(()=>cp.textContent='کپی کد',1200)}catch(e){cp.textContent='کپی نشد'}};
-  head.append(lang,cp);block.appendChild(head);
-  const code=document.createElement('code');code.textContent=m[2];block.appendChild(code);frag.appendChild(block);last=m.index+m[0].length;
- }
- if(last<text.length) frag.appendChild(document.createTextNode(text.slice(last)));
- return frag;
-}
-function render(){
- const box=document.getElementById('messages');box.innerHTML='';
- if(!messages.length){box.innerHTML='<div class="empty"><div><h1>Taha's Helper Bot</h1><p>هر چیزی می‌خواهی بنویس…</p></div></div>';return;}
- for(const m of messages){
-  const row=document.createElement('div');row.className='msg '+(m.role==='user'?'user':'assistant');
-  const av=document.createElement('div');av.className='avatar';av.textContent=m.role==='user'?'ش':'م';
-  const wrap=document.createElement('div');wrap.className='bubble';
-  if(m.image_url){
-   if(m.content) wrap.appendChild(renderContent(m.content));
-   const img=document.createElement('img');img.className='generated-image';img.src=m.image_url;img.alt=m.image_prompt||'تصویر ساخته‌شده';img.loading='lazy';wrap.appendChild(img);
-   const tools=document.createElement('div');tools.className='image-tools';
-   const dl=document.createElement('a');dl.className='msg-action image-download';dl.href=m.image_url;dl.download='meraj-generated-image.png';dl.target='_blank';dl.textContent='⬇️ دریافت تصویر';tools.appendChild(dl);
-   const cp=document.createElement('button');cp.className='msg-action';cp.textContent='کپی لینک';cp.onclick=async()=>{try{await navigator.clipboard.writeText(m.image_url);cp.textContent='کپی شد ✓';setTimeout(()=>cp.textContent='کپی لینک',1200)}catch(e){}};tools.appendChild(cp);wrap.appendChild(tools);
-  }else{
-   wrap.appendChild(renderContent(String(m.content||'')));
-  }
-  if(m.file_url){const ft=document.createElement('div');ft.className='file-tools';const a=document.createElement('a');a.className='msg-action file-download';a.href=m.file_url;a.download=m.file_name||'';a.textContent='📁 دریافت فایل'+(m.file_name?' — '+m.file_name:'');ft.appendChild(a);wrap.appendChild(ft);}
-  if(Array.isArray(m.sources)&&m.sources.length){const src=document.createElement('div');src.className='sources';const title=document.createElement('div');title.className='sources-title';title.textContent='منابع وب';src.appendChild(title);m.sources.forEach((x,i)=>{const a=document.createElement('a');a.className='source-link';a.href=x.url||'#';a.target='_blank';a.rel='noopener noreferrer';a.textContent='['+(i+1)+'] '+(x.title||x.url||'منبع');src.appendChild(a)});wrap.appendChild(src);}
-  const actions=document.createElement('div');actions.className='msg-actions';
-  const copy=document.createElement('button');copy.className='msg-action';copy.textContent='کپی';copy.onclick=async()=>{try{await navigator.clipboard.writeText(String(m.content||''));copy.textContent='کپی شد ✓';setTimeout(()=>copy.textContent='کپی',1200)}catch(e){}};
-  const share=document.createElement('button');share.className='msg-action';share.textContent='اشتراک‌گذاری';share.onclick=async()=>{try{if(navigator.share)await navigator.share({text:String(m.content||'')});else await navigator.clipboard.writeText(String(m.content||''));}catch(e){}};
-  actions.append(copy,share);wrap.appendChild(actions);
-  row.append(av,wrap);box.appendChild(row);
- }
- box.scrollTop=box.scrollHeight;
-}
-function newChat(){messages=[];currentChatId=null;lastUploadedImageName='';render();input.value='';document.getElementById('file').value='';document.getElementById('filePill').textContent='';input.focus();document.getElementById('status').textContent='آماده';loadHistory().catch(()=>{});}
-async function clearChat(){if(!currentChatId){newChat();return;}try{await fetch('/api/chats/'+encodeURIComponent(currentChatId),{method:'DELETE'});}catch(e){}newChat();}
-function showAbout(){alert('Taha's Helper Bot\nدستیار هوش مصنوعی Flask');}
-function filePicked(el){const f=el.files&&el.files[0];lastUploadedImageName=(f&&f.type&&f.type.startsWith('image/'))?'__pending__':'';document.getElementById('filePill').textContent=f?'📎 '+f.name:'';}
-function setBusy(v){setChatBusy(v);}
 input.addEventListener('input',()=>{input.style.height='auto';input.style.height=Math.min(input.scrollHeight,160)+'px'});
 input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}});
 function toggleSide(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('overlay').classList.toggle('open')}
 function toggleMenu(){document.getElementById('menu').classList.toggle('open')}
-function toggleImagePanel(){const p=document.getElementById('imagePanel');const b=document.getElementById('imageGenBtn');if(!p||!b)return; p.classList.toggle('open');b.classList.toggle('active');if(p.classList.contains('open')){const inp=document.getElementById('imagePrompt');if(inp)inp.focus();}}
-function cancelRequest(){if(chatController){chatController.abort();document.getElementById('status').textContent='درخواست متوقف شد';}}
-function setChatBusy(v){chatBusy=v;document.getElementById('send').disabled=v;document.getElementById('mic').disabled=v;document.getElementById('cancelBtn').classList.toggle('show',v);if(!v&&!imageBusy)document.getElementById('status').textContent='آماده';}
-function setImageBusy(v){imageBusy=v;const panel=document.getElementById('imagePanel');if(panel){const btn=panel.querySelector('button');if(btn)btn.disabled=v;}if(!v&&!chatBusy)document.getElementById('status').textContent='آماده';}
+function toggleImagePanel(){const p=document.getElementById('imagePanel');const b=document.getElementById('imageGenBtn');p.classList.toggle('open');b.classList.toggle('active');if(p.classList.contains('open'))document.getElementById('imagePrompt').focus()}
+function cancelRequest(){if(activeController){activeController.abort();document.getElementById('status').textContent='درخواست متوقف شد';}}
+function newChat(){messages=[];currentChatId=null;render();input.value='';document.getElementById('file').value='';document.getElementById('filePill').textContent='';input.focus();document.getElementById('status').textContent='چت جدید';loadHistory()}
+function clearChat(){if(!currentChatId){newChat();return} fetch('/api/chats/'+currentChatId,{method:'DELETE'}).finally(()=>newChat())}
+function showAbout(){alert('Taha's Helper Bot\nچت، تاریخچه دائمی، فایل و تبدیل صدا به متن')}
+function filePicked(el){if(el.files.length){document.getElementById('filePill').textContent='📎 '+el.files[0].name;document.getElementById('status').textContent='فایل آماده ارسال است'}}
+function addMessage(role,text,extra={}){messages.push({role,content:text,...extra});render()}
+function escapeHtml(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;')}
+function renderRichText(text,bubble){
+ const raw=String(text??'');const re=/```([^\n`]*)\n([\s\S]*?)```/g;let last=0,m;
+ while((m=re.exec(raw))){
+  const before=raw.slice(last,m.index);if(before){const div=document.createElement('div');div.innerHTML=escapeHtml(before).replace(/\n/g,'<br>');bubble.appendChild(div)}
+  const pre=document.createElement('pre');pre.className='code-block';
+  const head=document.createElement('div');head.className='code-head';
+  const lang=document.createElement('span');lang.textContent=(m[1]||'code').trim()||'code';
+  const btn=document.createElement('button');btn.className='code-copy';btn.type='button';btn.textContent='کپی کد';btn.addEventListener('click',()=>copyCodeBlock(m[2],btn));
+  head.appendChild(lang);head.appendChild(btn);pre.appendChild(head);
+  const code=document.createElement('code');code.textContent=m[2].replace(/\n$/,'');pre.appendChild(code);bubble.appendChild(pre);last=re.lastIndex;
+ }
+ const after=raw.slice(last);if(after){const div=document.createElement('div');div.innerHTML=escapeHtml(after).replace(/\n/g,'<br>');bubble.appendChild(div)}
+}
+function copyCodeBlock(code,btn){const done=()=>{const old=btn.textContent;btn.textContent='کپی شد ✓';setTimeout(()=>btn.textContent=old,1200)};if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(code).then(done).catch(()=>{fallbackCopy(code);done()})}else{fallbackCopy(code);done()}}
+function render(){const box=document.getElementById('messages');if(!messages.length){box.innerHTML='<div class="empty"><div><h1>Taha's Helper Bot</h1><p>هر چیزی می‌خواهی بنویس…</p></div></div>';return}box.innerHTML='';messages.forEach((m,idx)=>{const row=document.createElement('div');row.className='msg '+m.role;row.innerHTML='<div class="avatar">'+(m.role==='user'?'شما':'م')+'</div><div class="bubble"></div>';const bubble=row.querySelector('.bubble');renderRichText(m.content,bubble);if(m.image_url){const img=document.createElement('img');img.className='generated-image';img.src=m.image_url;img.alt='تصویر';img.loading='lazy';bubble.appendChild(img);const tools=document.createElement('div');tools.className='image-tools';const dl=document.createElement('a');dl.className='msg-action image-download';dl.textContent='⬇️ دانلود تصویر';let downloadUrl=m.image_url;if(typeof downloadUrl==='string'&&downloadUrl.startsWith('/generated/'))downloadUrl='/generated-download/'+downloadUrl.substring('/generated/'.length);dl.href=downloadUrl;dl.setAttribute('download','meraj-image.png');tools.appendChild(dl);bubble.appendChild(tools);const cap=document.createElement('div');cap.className='image-caption';cap.textContent='تصویر آماده است';bubble.appendChild(cap)}if(m.file_url){const tools=document.createElement('div');tools.className='file-tools';const dl=document.createElement('a');dl.className='msg-action file-download';dl.textContent='📁 دریافت فایل'+(m.file_name?' — '+m.file_name:'');dl.href=m.file_url;dl.setAttribute('download',m.file_name||'meraj-file');tools.appendChild(dl);bubble.appendChild(tools)}if(m.role==='assistant'){const actions=document.createElement('div');actions.className='msg-actions';actions.innerHTML='<button class="msg-action" onclick="copyMsg('+idx+',this)">کپی</button><button class="msg-action" onclick="shareMsg('+idx+')">اشتراک‌گذاری</button>';bubble.appendChild(actions);if(Array.isArray(m.sources)&&m.sources.length){const web=document.createElement('div');web.className='sources';web.innerHTML='<div class="web-badge">🌐 منابع وب</div><div class="sources-title">منابع استفاده‌شده:</div>';m.sources.forEach((src,i)=>{const a=document.createElement('a');a.className='source-link';a.href=src.url;a.target='_blank';a.rel='noopener noreferrer';a.textContent='['+(i+1)+'] '+src.title;web.appendChild(a)});bubble.appendChild(web)}}box.appendChild(row)});box.scrollTop=box.scrollHeight}
+function copyMsg(i,btn){const text=messages[i]?.content||'';const done=()=>{if(btn){const old=btn.textContent;btn.textContent='کپی شد ✓';setTimeout(()=>btn.textContent=old,1200)}};if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done).catch(()=>{fallbackCopy(text);done()})}else{fallbackCopy(text);done()}}
+function fallbackCopy(text){const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}
+async function shareMsg(i){const text=messages[i]?.content||'';if(navigator.share){try{await navigator.share({title:'Taha's Helper Bot',text:text});return}catch(e){}}fallbackCopy(text);alert('متن پاسخ کپی شد؛ حالا می‌توانی آن را در هر برنامه‌ای به اشتراک بگذاری.')}
+function setBusy(v){
+ busy=v;
+ const sendBtn=document.getElementById('send'); if(sendBtn)sendBtn.disabled=v;
+ const micBtn=document.getElementById('mic'); if(micBtn)micBtn.disabled=v;
+ const cancelBtn=document.getElementById('cancelBtn'); if(cancelBtn)cancelBtn.classList.toggle('show',v);
+ const status=document.getElementById('status'); if(status&&!v)status.textContent='آماده';
+}
 async function saveLocalState(){try{if(messages.length) localStorage.setItem('meraj_last_chat',JSON.stringify({id:currentChatId,messages}));}catch(e){}}
 async function sendMessage(){
- if(chatBusy)return;
+ if(busy)return;
  const text=input.value.trim();
  const file=document.getElementById('file').files[0];
  if(!text && !file)return;
- setChatBusy(true);
+ setBusy(true);
  let shownText=text;
- chatController=new AbortController();
- const controller=chatController;
- const timer=setTimeout(()=>controller.abort(),90000);
+ activeController=new AbortController();
+ const timer=setTimeout(()=>activeController&&activeController.abort(),90000);
  try{
   if(file){
    document.getElementById('status').textContent='در حال خواندن فایل…';
    const fd=new FormData();fd.append('file',file);
-   const ur=await fetch('/api/upload',{method:'POST',body:fd,signal:controller.signal});
+   const ur=await fetch('/api/upload',{method:'POST',body:fd,signal:activeController.signal});
    const ud=await ur.json().catch(()=>({}));if(!ur.ok)throw new Error(ud.error||('خطا در ارسال فایل ('+ur.status+')'));if(!ud.name)throw new Error('سرور فایل را دریافت نکرد. دوباره انتخابش کن.');
-   const marker=ud.kind==='image'?'[تصویر پیوست شد: '+ud.name+']':'[فایل پیوست شد: '+ud.name+']'; if(ud.kind==='image')lastUploadedImageName=ud.name;
+   const marker=ud.kind==='image'?'[تصویر پیوست شد: '+ud.name+']':'[فایل پیوست شد: '+ud.name+']';
    shownText=(shownText?shownText+'\n\n':'')+marker;document.getElementById('file').value='';document.getElementById('filePill').textContent='';
   }
   addMessage('user',shownText);input.value='';input.style.height='auto';
-  const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:currentChatId,messages}),signal:controller.signal});
-  const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||'خطای سرور');
+  const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:currentChatId,messages}),signal:activeController.signal});
+  const data=await r.json();if(!r.ok)throw new Error(data.error||'خطای سرور');
   currentChatId=data.chat_id||currentChatId;addMessage('assistant',data.reply||'پاسخی دریافت نشد.',{sources:data.sources||[],file_url:data.file_url||'',file_name:data.file_name||''});
   document.getElementById('modelLabel').textContent=data.model||'';
-  // مهم: قفل ارسال همین‌جا آزاد می‌شود؛ ذخیره‌سازی تاریخچه نباید ارسال پیام بعدی را متوقف کند.
-  setChatBusy(false);
-  loadHistory().catch(()=>{});saveLocalState().catch(()=>{});
- }catch(e){
-  if(e.name==='AbortError')addMessage('assistant','⏱️ پاسخ طول کشید و متوقف شد. دوباره ارسال کن.');
-  else addMessage('assistant','❌ '+e.message);
- }finally{clearTimeout(timer);if(chatController===controller)chatController=null;setChatBusy(false);input.focus();}
+  // History/local persistence are background tasks. They must never keep the composer locked.
+  setBusy(false);
+  loadHistory().catch(()=>{}); saveLocalState().catch(()=>{});
+ }catch(e){if(e.name==='AbortError')addMessage('assistant','⏱️ پاسخ طول کشید و متوقف شد. دوباره ارسال کن.');else addMessage('assistant','❌ '+e.message)}
+ finally{clearTimeout(timer);activeController=null;setBusy(false);input.focus()}
 }
 async function generateImage(){
- const p=document.getElementById('imagePrompt').value.trim();
- if(imageBusy)return;
- if(!p){document.getElementById('status').textContent='توضیح تصویر را بنویس.';return}
- setImageBusy(true);document.getElementById('status').textContent='🎨 در حال ساخت تصویر…';
- const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),60000);
- try{
-  const r=await fetch('/api/generate-image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:p,image_name:lastUploadedImageName||''}),signal:controller.signal});
-  const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'ساخت تصویر ناموفق بود');
-  messages.push({role:'assistant',content:'تصویر ساخته شد\n\nپرامپت: '+p+(d.vision_analysis?'\n\n🔎 بررسی Groq Vision:\n'+d.vision_analysis:''),image_url:d.url,image_prompt:p,sources:[]});render();
-  const ip=document.getElementById('imagePrompt');if(ip)ip.value='';const panel=document.getElementById('imagePanel');const genBtn=document.getElementById('imageGenBtn');if(panel)panel.classList.remove('open');if(genBtn)genBtn.classList.remove('active');
-  if(!currentChatId)currentChatId=crypto.randomUUID?crypto.randomUUID():String(Date.now());
-  // تصویر مستقل از چت است؛ بعد از آماده‌شدن تصویر، ارسال پیام متنی همچنان آزاد است.
-  setImageBusy(false);
+ if(busy)return;const p=document.getElementById('imagePrompt').value.trim();if(!p){document.getElementById('status').textContent='توضیح تصویر را بنویس.';return}
+ setBusy(true);document.getElementById('status').textContent='🎨 در حال ساخت تصویر…';activeController=new AbortController();const timer=setTimeout(()=>activeController&&activeController.abort(),60000);
+ try{const r=await fetch('/api/generate-image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:p}),signal:activeController.signal});const d=await r.json();if(!r.ok)throw new Error(d.error||'ساخت تصویر ناموفق بود');messages.push({role:'assistant',content:'تصویر ساخته شد\n\nپرامپت: '+p,image_url:d.url,image_prompt:p,sources:[]});render();document.getElementById('imagePrompt').value='';toggleImagePanel();if(!currentChatId)currentChatId=crypto.randomUUID?crypto.randomUUID():String(Date.now());
+  // Release the composer immediately after the image is ready. Saving/history are non-blocking.
+  setBusy(false);
   fetch('/api/save-image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:currentChatId,messages})}).catch(()=>{});
   loadHistory().catch(()=>{});
  }catch(e){document.getElementById('status').textContent=e.name==='AbortError'?'ساخت تصویر زمان زیادی برد. دوباره امتحان کن.':'خطا در ساخت تصویر: '+e.message}
- finally{clearTimeout(timer);setImageBusy(false);input.focus();}
+ finally{clearTimeout(timer);activeController=null;setBusy(false);input.focus()}
 }
 
 async function loadHistory(){
- const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),8000);
- try{const r=await fetch('/api/chats',{cache:'no-store',signal:controller.signal});const d=await r.json().catch(()=>({chats:[]}));if(!r.ok)throw new Error(d.error||'history');const h=document.getElementById('history');h.innerHTML='';
-  if(!Array.isArray(d.chats)||!d.chats.length){h.innerHTML='<div class="history-empty">هنوز چتی ذخیره نشده</div>';return}
+ try{const r=await fetch('/api/chats');const d=await r.json();const h=document.getElementById('history');h.innerHTML='';
+  if(!d.chats.length){h.innerHTML='<div class="history-empty">هنوز چتی ذخیره نشده</div>';return}
   d.chats.forEach(c=>{const b=document.createElement('button');b.className='history-item'+(c.id===currentChatId?' active':'');b.textContent=c.title||'چت جدید';b.onclick=()=>openChat(c.id);h.appendChild(b)})
- }catch(e){}finally{clearTimeout(timer)}
+ }catch(e){}
 }
 async function openChat(id){
  try{const r=await fetch('/api/chats/'+encodeURIComponent(id));const d=await r.json();if(!r.ok)throw new Error(d.error);currentChatId=id;messages=d.messages||[];render();document.getElementById('status').textContent='ذخیره شد';loadHistory();if(window.innerWidth<900)toggleSide();}
@@ -1079,19 +906,7 @@ async function transcribe(blob,filename){
  }catch(e){setBusy(false);document.getElementById('status').textContent='آماده';alert('❌ '+e.message)}
 }
 
-async function loadInfo(){
- try{
-  const r=await fetch('/health',{cache:'no-store'});
-  const d=await r.json().catch(()=>({}));
-  if(!r.ok) throw new Error('health '+r.status);
-  document.getElementById('modelLabel').textContent=d.model||'مدل آماده';
- }catch(e){
-  // /health is public, so a session/auth problem cannot leave the UI
-  // permanently stuck on "● آنلاین".
-  const el=document.getElementById('modelLabel');
-  if(el) el.textContent='مدل آماده';
- }
-}
+async function loadInfo(){try{const r=await fetch('/api/info');const d=await r.json();document.getElementById('modelLabel').textContent=d.model||'مدل نامشخص'}catch(e){}}
 loadInfo();loadHistory();
 </script>
 </body>
@@ -1100,67 +915,7 @@ loadInfo();loadHistory();
 
 @app.get("/")
 def home():
-    if not read_account():
-        return redirect(url_for("register_page"))
-    if not session.get("authenticated"):
-        return redirect(url_for("login_page"))
     return HTML_PAGE
-
-
-@app.get("/register")
-def register_page():
-    # Always allow opening the registration page directly.
-    # If an account already exists, show the login page instead of creating another account.
-    if read_account():
-        return auth_page("login")
-    return auth_page("register")
-
-
-@app.post("/register")
-def register_submit():
-    username = (request.form.get("username") or "").strip()
-    password = request.form.get("password") or ""
-    password2 = request.form.get("password2") or ""
-    if not re.fullmatch(r"[A-Za-z0-9_.-]{3,40}", username):
-        return auth_page("register", "نام کاربری باید ۳ تا ۴۰ کاراکتر و فقط شامل حروف انگلیسی، عدد، نقطه، خط تیره یا زیرخط باشد.")
-    if len(password) < 6:
-        return auth_page("register", "رمز عبور باید حداقل ۶ کاراکتر باشد.")
-    if password != password2:
-        return auth_page("register", "تکرار رمز عبور یکسان نیست.")
-    try:
-        write_account(username, password)
-    except Exception as e:
-        print("[ACCOUNT WRITE ERROR]", repr(e))
-        return auth_page("register", "ساخت حساب انجام نشد. دوباره تلاش کن.")
-    return redirect(url_for("login_page"))
-
-
-@app.get("/login")
-def login_page():
-    # Never redirect /login back to /register just because the account file
-    # is temporarily unavailable (for example after a Render restart).
-    if session.get("authenticated"):
-        return redirect(url_for("home"))
-    return auth_page("login")
-
-
-@app.post("/login")
-def login_submit():
-    account = read_account()
-    password = request.form.get("password") or ""
-    if not account:
-        return auth_page("login", "حسابی روی این سرور پیدا نشد. اگر سرویس Render ری‌استارت شده، باید دوباره ثبت‌نام کنی.")
-    if not check_password_hash(account.get("password_hash", ""), password):
-        return auth_page("login", "رمز عبور اشتباه است.")
-    session.clear()
-    session["authenticated"] = True
-    return redirect(url_for("home"))
-
-
-@app.post("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("login_page"))
 
 
 @app.get("/health")
@@ -1169,13 +924,11 @@ def health():
 
 
 @app.get("/api/info")
-@login_required
 def info():
     return jsonify(ok=True, model=MODEL, vision_model=VISION_MODEL, transcription_model=TRANSCRIBE_MODEL, image_generation=IMAGE_GEN_PROVIDER)
 
 
 @app.get("/api/chats")
-@login_required
 def list_chats():
     data = read_history()
     chats = []
@@ -1190,7 +943,6 @@ def list_chats():
 
 
 @app.get("/api/chats/<chat_id>")
-@login_required
 def get_chat(chat_id):
     data = read_history()
     chat = data.get(chat_id)
@@ -1204,7 +956,6 @@ def get_chat(chat_id):
 
 
 @app.delete("/api/chats/<chat_id>")
-@login_required
 def delete_chat(chat_id):
     data = read_history()
     if chat_id in data:
@@ -1214,7 +965,6 @@ def delete_chat(chat_id):
 
 
 @app.post("/api/chat")
-@login_required
 def chat():
     data = request.get_json(silent=True) or {}
     messages = data.get("messages") or []
@@ -1264,7 +1014,6 @@ def chat():
 
 
 @app.post("/api/upload")
-@login_required
 def upload():
     f = request.files.get("file")
     if not f or not f.filename:
@@ -1281,13 +1030,11 @@ def upload():
 
 
 @app.get("/generated/<path:filename>")
-@login_required
 def generated_file(filename):
     return send_from_directory(GENERATED_DIR, filename)
 
 
 @app.get("/generated-download/<path:filename>")
-@login_required
 def generated_download(filename):
     # Force a real file download on Android/mobile browsers.
     safe = (GENERATED_DIR / filename).resolve()
@@ -1301,7 +1048,6 @@ def generated_download(filename):
 
 
 @app.get("/generated-download-file/<path:filename>")
-@login_required
 def generated_download_file(filename):
     safe = (FILES_DIR / filename).resolve()
     try:
@@ -1314,21 +1060,14 @@ def generated_download_file(filename):
 
 
 @app.post("/api/generate-image")
-@login_required
 def generate_image():
     data = request.get_json(silent=True) or {}
     prompt = (data.get("prompt") or "").strip()
-    image_name = Path(str(data.get("image_name") or "")).name
-    reference_path = UPLOAD_DIR / image_name if image_name else None
     if not prompt:
         return jsonify(error="توضیح تصویر را بنویس."), 400
-    if reference_path and (not reference_path.exists() or not is_image_file(reference_path)):
-        reference_path = None
     try:
-        image_url = generate_image_file(prompt, reference_path)
-        analyze_generated_image._last_prompt = prompt
-        analysis = analyze_generated_image(image_url)
-        return jsonify(ok=True, url=image_url, provider=IMAGE_GEN_PROVIDER, vision_analysis=analysis)
+        image_url = generate_image_file(prompt)
+        return jsonify(ok=True, url=image_url, provider=IMAGE_GEN_PROVIDER)
     except requests.HTTPError as e:
         detail = getattr(e.response, "text", "")[:500] if getattr(e, "response", None) is not None else str(e)
         print("\n[IMAGE GEN HTTP ERROR]", detail)
@@ -1342,7 +1081,6 @@ def generate_image():
 
 
 @app.post("/api/save-image")
-@login_required
 def save_generated_image():
     data = request.get_json(silent=True) or {}
     chat_id = data.get("chat_id") or str(uuid.uuid4())
@@ -1357,7 +1095,6 @@ def save_generated_image():
 
 
 @app.post("/api/transcribe")
-@login_required
 def transcribe():
     f = request.files.get("audio")
     if not f or not f.filename:

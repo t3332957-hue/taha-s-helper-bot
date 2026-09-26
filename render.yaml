@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: tahas-helper-bot
+    name: taha-s-helper-bot
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
