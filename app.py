@@ -362,7 +362,7 @@ def groq_chat(messages, use_vision=False):
         "model": model,
         "messages": messages,
         "temperature": 0.7,
-        "max_completion_tokens": 600,
+        "max_completion_tokens": 450,
     }
 
     last_error = None
@@ -381,7 +381,7 @@ def groq_chat(messages, use_vision=False):
                     detail = {}
                 msg = str(detail.get("error", {}).get("message", "")) if isinstance(detail, dict) else str(detail)
                 if "output tokens per minute" in msg.lower() or "rate_limit_exceeded" in str(detail).lower():
-                    payload["max_completion_tokens"] = 350
+                    payload["max_completion_tokens"] = 300
                     r = requests.post(
                         f"{API_BASE}/chat/completions",
                         headers=headers,
@@ -436,13 +436,15 @@ def prepare_messages(raw_messages):
     has_image = False
     # Sending the entire history plus old base64 images can cause remote
     # disconnects. Keep recent context only; the complete history is still saved locally.
-    raw_messages = raw_messages[-10:]
+    raw_messages = raw_messages[-6:]
     latest_user_index = max((i for i, m in enumerate(raw_messages) if m.get("role") == "user"), default=-1)
     for idx, m in enumerate(raw_messages):
         role = m.get("role")
         content = m.get("content", "")
         if role not in ("user", "assistant") or not isinstance(content, str):
             continue
+        if len(content) > 3500:
+            content = content[:3500] + "\n[بخش قدیمی پیام کوتاه شد]"
 
         image_match = re.search(r"\[تصویر پیوست شد: (.+?)\]", content)
         if image_match:
@@ -477,6 +479,21 @@ def prepare_messages(raw_messages):
             if path.exists():
                 content += build_file_context(path)
         prepared.append({"role": role, "content": content})
+    total_chars = sum(len(x.get("content", "")) for x in prepared if isinstance(x.get("content"), str))
+    if total_chars > 18000:
+        compact = []
+        remaining = 18000
+        for x in reversed(prepared):
+            if isinstance(x.get("content"), str) and remaining > 0:
+                text = x["content"]
+                take = min(len(text), remaining)
+                y = dict(x)
+                y["content"] = text[-take:]
+                compact.append(y)
+                remaining -= take
+            elif not isinstance(x.get("content"), str):
+                compact.append(x)
+        prepared = list(reversed(compact))
     return prepared, has_image
 
 
