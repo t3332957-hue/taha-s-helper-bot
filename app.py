@@ -620,6 +620,11 @@ def generate_image_file(prompt):
         )
         if r.ok and r.content:
             return _save_generated_bytes(r.content, r.headers.get("Content-Type"))
+        # Do not retry on billing/credit errors. A 402 is definitive and
+        # retrying with POST only creates another failed Pollinations request.
+        if r.status_code == 402:
+            detail = r.text[:500].replace("\n", " ").strip()
+            raise RuntimeError(f"POLLINATIONS_402:{detail}")
         print("[IMAGE GEN GET ERROR]", r.status_code, r.text[:1000])
     except requests.RequestException as e:
         print("[IMAGE GEN GET CONNECTION ERROR]", repr(e))
@@ -1075,6 +1080,14 @@ def generate_image():
     except requests.RequestException as e:
         print("\n[IMAGE GEN CONNECTION ERROR]", repr(e))
         return jsonify(error="اتصال به سرویس ساخت تصویر برقرار نشد. دوباره تلاش کن."), 502
+    except RuntimeError as e:
+        msg = str(e)
+        if msg.startswith("POLLINATIONS_402:"):
+            detail = msg.split(":", 1)[1].strip()
+            print("\n[IMAGE GEN 402]", detail)
+            return jsonify(error="ساخت تصویر انجام نشد: حساب Pollinations اعتبار کافی ندارد یا دسترسی API فعال نیست."), 402
+        print("\n[IMAGE GEN ERROR]", repr(e))
+        return jsonify(error=msg), 500
     except Exception as e:
         print("\n[IMAGE GEN ERROR]", repr(e))
         return jsonify(error=str(e)), 500
